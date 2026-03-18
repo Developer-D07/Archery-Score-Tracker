@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Archery Score Tracker</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<!-- ========================= CSS ========================= -->
+<style>
+:root{
+  --bg:#f0f0f0;
+  --card:#fff;
+  --text:#111;
+  --muted:#555;
+  --accent:#1565c0;
+}
+.dark{
+  --bg:#0f1720;
+  --card:#0b1220;
+  --text:#e6eef8;
+  --muted:#9fb6d8;
+  --accent:#64b5f6;
+}
+
+body{
+  font-family:Times New Roman;
+  background:var(--bg);
+  padding:20px;
+  color:var(--text);
+  transition:.25s;
+}
+
+.container{
+  max-width:1250px;
+  margin:auto;
+  background:var(--card);
+  padding:22px 28px;
+  border-radius:18px;
+  box-shadow:0 14px 36px rgba(0,0,0,.09);
+}
+
+.brand{text-align:center;margin-bottom:14px}
+.brand h1{margin:0;font-weight:1200}
+.brand small{color:var(--muted)}
+
+.controls{
+  display:flex;
+  flex-wrap:wrap;
+  gap:12px;
+  justify-content:center;
+  align-items:center;
+  margin-bottom:14px;
+}
+
+input,select{
+  padding:8px 12px;
+  border-radius:10px;
+  border:1px solid #ccc;
+  font-weight:700;
+}
+
+button{
+  padding:10px 18px;
+  border-radius:14px;
+  border:0;
+  font-weight:800;
+  background:var(--accent);
+  color:white;
+  cursor:pointer;
+  transition:.15s;
+}
+button:hover{opacity:.95;transform:translateY(-1px)}
+
+#scoreInputs{
+  display:flex;
+  gap:14px;
+  justify-content:center;
+  margin:18px 0;
+}
+
+#scoreInputs input{
+  width:88px;
+  padding:12px;
+  text-align:center;
+  font-weight:900;
+  border-radius:14px;
+  border:1px solid #ccc;
+  transition:.2s;
+}
+
+#scoreInputs input.active{
+  outline:4px solid rgba(21,101,192,.45);
+  transform:scale(1.12);
+  box-shadow:0 0 18px rgba(21,101,192,.45);
+}
+
+.target-wrapper{
+  width:560px;
+  height:560px;
+  margin:22px auto;
+  position:relative;
+  touch-action:manipulation;
+}
+
+canvas{display:block}
+
+.marker{
+  position:absolute;
+  width:15px;
+  height:15px;
+  border-radius:50%;
+  border:2px solid white;
+  transform:translate(-50%,-50%);
+}
+
+.touch-mode .marker{width:20px;height:20px}
+
+#scoreHistory{margin-top:14px;font-size:16px}
+
+/* Zoom Lens */
+#zoomLens{
+  position:absolute;
+  right:-210px;
+  top:0;
+  width:180px;
+  height:180px;
+  border-radius:12px;
+  border:2px solid #1565c0;
+  display:none;
+  background:black;
+  z-index:5
+}
+
+/* Toast */
+.toast{
+  position:fixed;
+  bottom:18px;
+  right:18px;
+  background:#1565c0;
+  color:white;
+  padding:12px 18px;
+  border-radius:12px;
+  font-weight:600;
+  display:none
+}
+
+.dark input,.dark select{
+  background:#111a2b;
+  border-color:#233;
+  color:white;
+}
+</style>
+</head>
+
+<body>
+
+<!-- ========================= UI ========================= -->
+<div class="container">
+
+<div class="brand">
+<h1>Archery Score Tracker</h1>
+</div>
+
+<div class="controls">
+<label>Bow Style:</label>
+<select id="bowStyle">
+<option value="recurve" selected>Recurve Bow</option>
+<option value="compound">Compound Bow</option>
+<option value="wood">Wooden Bow</option>
+</select>
+
+<label>Distance:</label>
+<select id="distance"></select>
+
+<select id="woodFace" style="display:none">
+<option value="80">80cm Target</option>
+<option value="122">122cm Target</option>
+</select>
+
+<label>Arrows/End:</label>
+<select id="arrowsPerEnd">
+<option value="6">6 Arrows</option>
+<option value="5">5 Arrows</option>
+<option value="3">3 Arrows</option>
+</select>
+
+<label>Ends per session:</label>
+<input id="endsPerSession" type="number" value="10" style="width:90px">
+<input id="sessionName" placeholder="Session name">
+
+<button id="saveSession">Save</button>
+<button id="loadSession">Load</button>
+<button id="deleteSession">Delete</button>
+
+<button id="toggleTheme">Dark Mode</button>
+<button id="exportBtn">Export</button>
+<button id="clearAll">Clear</button>
+</div>
+
+<div id="scoreInputs"></div>
+
+<div style="text-align:center;margin-bottom:14px">
+<button id="submitEnd">Submit End</button>
+<button id="undoBtn">Undo</button>
+<button id="redoBtn">Redo</button>
+</div>
+
+<div class="target-wrapper" id="targetWrapper">
+<canvas id="targetCanvas" width="560" height="560"></canvas>
+<canvas id="zoomLens" width="180" height="180"></canvas>
+</div>
+
+<h3>Score History</h3>
+<div id="scoreHistory"></div>
+
+<h3>Score Graph</h3>
+<canvas id="lineChart" height="160"></canvas>
+
+<h3>Arrow Dispersion</h3>
+<canvas id="dispersionChart" width="560" height="560"></canvas>
+
+<h3>Results & Analytics</h3>
+<div id="analytics"></div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- ========================= JAVASCRIPT ========================= -->
+<script>
+
+/* ---------- Helpers ---------- */
+const $ = id => document.getElementById(id)
+
+/* ---------- Theme ---------- */
+if(localStorage.getItem("archery_theme")==="dark")
+document.body.classList.add("dark")
+
+$("toggleTheme").onclick=()=>{
+  document.body.classList.toggle("dark")
+  localStorage.setItem("archery_theme",
+  document.body.classList.contains("dark")?"dark":"")
+}
+
+/* ---------- Toast ---------- */
+function toast(msg){
+  let t=$("toast")
+  t.textContent=msg
+  t.style.display="block"
+  setTimeout(()=>t.style.display="none",2200)
+}
+
+/* ---------- Canvas ---------- */
+const canvas=$("targetCanvas"),ctx=canvas.getContext("2d")
+const dispCanvas=$("dispersionChart"),dispCtx=dispCanvas.getContext("2d")
+const zoomCanvas=$("zoomLens"),zoomCtx=zoomCanvas.getContext("2d")
+
+const CENTER={x:280,y:280}
+let OUTER_RADIUS=250
+
+let arrowsPerEnd=6,currentArrow=1
+let markers=[],scoreData=[],displayData=[],arrowPositions=[]
+const SESSION_KEY="wa_sessions_v1"
+
+/* ---------- Distances ---------- */
+const DISTANCES={
+compound:[40,50],
+recurve:[20,30,40,50,60,70],
+wood:[20,30,40,50]
+}
+
+function updateDistances(){
+  let bow=$("bowStyle").value
+  let d=$("distance")
+  d.innerHTML=""
+  DISTANCES[bow].forEach(m=>{
+    let opt=document.createElement("option")
+    opt.value=m
+    opt.textContent=m+" m"
+    d.appendChild(opt)
+  })
+
+  $("woodFace").style.display = bow==="wood" ? "inline-block" : "none"
+}
+
+/* ---------- Target Faces ---------- */
+const TARGETS={
+compound:{rings:["X","10","9","8","7","6","5"],radii:[0.045,0.14,0.24,0.34,0.44,0.58,0.72],colors:["#FFD700","#FFD700","#FFD700","#E53935","#E53935","#1E88E5","#1E88E5"],scale:1.05},
+face80:{rings:["X","10","9","8","7","6","5","4","3","2","1"],radii:[0.05,0.10,0.20,0.30,0.40,0.50,0.60,0.70,0.80,0.90,1.00],colors:["#FFD700","#FFD700","#FFD700","#E53935","#E53935","#1E88E5","#1E88E5","#000","#000","#fff","#fff"],scale:0.82},
+face122:{rings:["X","10","9","8","7","6","5","4","3","2","1"],radii:[0.05,0.10,0.20,0.30,0.40,0.50,0.60,0.70,0.80,0.90,1.00],colors:["#FFD700","#FFD700","#FFD700","#E53935","#E53935","#1E88E5","#1E88E5","#000","#000","#fff","#fff"],scale:1.0}
+}
+
+function getActiveTarget(){
+  let bow=$("bowStyle").value
+  let dist=parseInt($("distance").value)
+
+  if(bow==="compound") return TARGETS.compound
+
+  if(bow==="recurve"){
+    return dist>=60 ? TARGETS.face122 : TARGETS.face80
+  }
+
+  if(bow==="wood"){
+    return $("woodFace").value==="122" ? TARGETS.face122 : TARGETS.face80
+  }
+}
+
+/* ---------- Draw Target ---------- */
+function drawTarget(){
+  ctx.clearRect(0,0,560,560)
+  let cfg=getActiveTarget()
+  OUTER_RADIUS=250*cfg.scale
+
+  for(let i=cfg.rings.length-1;i>=0;i--){
+    let r=OUTER_RADIUS*cfg.radii[i]
+    ctx.beginPath()
+    ctx.arc(CENTER.x,CENTER.y,r,0,Math.PI*2)
+    ctx.fillStyle=cfg.colors[i]
+    ctx.fill()
+    ctx.strokeStyle="#333"
+    ctx.stroke()
+  }
+
+  // Center X
+  ctx.fillStyle="#FFD700"
+  ctx.beginPath()
+  ctx.arc(CENTER.x,CENTER.y,OUTER_RADIUS*cfg.radii[0],0,Math.PI*2)
+  ctx.fill()
+
+  ctx.fillStyle="#000"
+  ctx.font="bold 18px Times New Roman"
+  ctx.textAlign="center"
+  ctx.textBaseline="middle"
+  ctx.fillText("x",CENTER.x,CENTER.y)
+}
+
+/* ---------- Inputs ---------- */
+function createInputs(){
+  arrowsPerEnd=parseInt($("arrowsPerEnd").value)
+  let box=$("scoreInputs")
+  box.innerHTML=""
+
+  for(let i=1;i<=arrowsPerEnd;i++){
+    let input=document.createElement("input")
+    input.placeholder="Arrow "+i
+    input.id="score"+i
+    input.onfocus=()=>setActiveArrow(i)
+    box.appendChild(input)
+  }
+
+  setActiveArrow(1)
+  clearMarkers()
+}
+
+function setActiveArrow(i){
+  currentArrow=i
+  for(let j=1;j<=arrowsPerEnd;j++){
+    let el=$(`score${j}`)
+    if(el) el.classList.toggle("active",j===i)
+  }
+}
+
+/* ---------- Markers ---------- */
+function placeMarker(x,y,val){
+  let m=document.createElement("div")
+  m.className="marker"
+  m.style.left=x+"px"
+  m.style.top=y+"px"
+
+  let color="#999"
+  if(["X","10","9"].includes(val)) color="#FFD700"
+  else if(["8","7"].includes(val)) color="#E53935"
+  else if(["6","5"].includes(val)) color="#1E88E5"
+  else if(["4","3"].includes(val)) color="#000"
+  else color="#eee"
+
+  m.style.background=color
+  $("targetWrapper").appendChild(m)
+  markers.push(m)
+}
+
+function clearMarkers(){
+  markers.forEach(m=>m.remove())
+  markers=[]
+}
+
+/* ---------- Click Scoring ---------- */
+canvas.onclick=function(e){
+  if(markers.length>=arrowsPerEnd) return
+
+  let rect=canvas.getBoundingClientRect()
+  let x=e.clientX-rect.left
+  let y=e.clientY-rect.top
+
+  let dx=x-CENTER.x, dy=y-CENTER.y
+  let dist=Math.sqrt(dx*dx+dy*dy)*0.98
+
+  let cfg=getActiveTarget()
+  let score="M"
+
+  for(let i=0;i<cfg.radii.length;i++){
+    if(dist<=OUTER_RADIUS*cfg.radii[i]){
+      score=cfg.rings[i]; break
+    }
+  }
+
+ placeMarker(x,y,score)
+arrowPositions.push({x,y})
+redoStack.push({x,y,score})
+  $(`score${currentArrow}`).value=score
+
+  if(currentArrow<arrowsPerEnd) setActiveArrow(currentArrow+1)
+}
+
+/* ---------- Zoom ---------- */
+canvas.addEventListener("mousemove",e=>{
+  const rect=canvas.getBoundingClientRect()
+  const x=e.clientX-rect.left, y=e.clientY-rect.top
+
+  zoomCanvas.style.display="block"
+  zoomCtx.clearRect(0,0,180,180)
+  zoomCtx.drawImage(canvas,x-40,y-40,80,80,0,0,180,180)
+
+  zoomCtx.strokeStyle="white"
+  zoomCtx.beginPath()
+  zoomCtx.moveTo(90,0); zoomCtx.lineTo(90,180)
+  zoomCtx.moveTo(0,90); zoomCtx.lineTo(180,90)
+  zoomCtx.stroke()
+})
+
+canvas.addEventListener("mouseleave",()=> zoomCanvas.style.display="none")
+
+/* ---------- Submit End ---------- */
+function parseScore(v){ return v==="X" ? 10 : parseInt(v)||0 }
+
+function submitEnd(){
+
+  if(markers.length < arrowsPerEnd){
+    toast("Some arrows are missing on the target")
+    return
+  }
+
+  for(let i=1;i<=arrowsPerEnd;i++){
+    if(!$(`score${i}`).value){
+      toast("Please score all arrows")
+      return
+    }
+   }
+
+  let scores=[], disp=[]
+  for(let i=1;i<=arrowsPerEnd;i++){
+    let v=$(`score${i}`).value
+    scores.push(parseScore(v))
+    disp.push(v)
+  }
+
+  scoreData.push(scores)
+  displayData.push(disp)
+
+  clearMarkers()
+  createInputs()
+  updateHistory()
+  updateCharts()
+  updateAnalytics()
+}
+
+/* ---------- Score History ---------- */
+function updateHistory(){
+  let h=$("scoreHistory")
+  h.innerHTML=""
+
+  scoreData.forEach((end,i)=>{
+    let total=end.reduce((a,b)=>a+b,0)
+    let avg=(total/end.length).toFixed(2)
+    let acc=((total/(end.length*10))*100).toFixed(2)
+
+    let row=document.createElement("div")
+    row.innerHTML=`<strong>End ${i+1}</strong> → ${displayData[i].join(", ")} | Total: ${total} | Avg: ${avg} | Acc: ${acc}%`
+    h.appendChild(row)
+  })
+}
+
+/* ---------- Charts ---------- */
+let lineChart=new Chart($("lineChart"),{
+  type:"line",
+  data:{labels:[],datasets:[{label:"End Total",data:[],borderWidth:2}]}
+})
+
+function updateCharts(){
+  let totals=scoreData.map(e=>e.reduce((a,b)=>a+b,0))
+  lineChart.data.labels=totals.map((_,i)=>"End "+(i+1))
+  lineChart.data.datasets[0].data=totals
+  lineChart.update()
+  drawDispersion()
+}
+
+/* ---------- Dispersion ---------- */
+function drawDispersion(){
+  dispCtx.clearRect(0,0,560,560)
+  let cfg=getActiveTarget()
+  OUTER_RADIUS=250*cfg.scale
+
+  // draw target background
+  for(let i=cfg.rings.length-1;i>=0;i--){
+    let r=OUTER_RADIUS*cfg.radii[i]
+    dispCtx.beginPath()
+    dispCtx.arc(280,280,r,0,Math.PI*2)
+    dispCtx.fillStyle=cfg.colors[i]
+    dispCtx.fill()
+    dispCtx.strokeStyle="#333"
+    dispCtx.stroke()
+  }
+
+  // plot arrows
+  arrowPositions.forEach(p=>{
+    dispCtx.beginPath()
+    dispCtx.arc(p.x,p.y,4,0,Math.PI*2)
+    dispCtx.fillStyle="black"
+    dispCtx.fill()
+  })
+
+  // cluster center
+  if(arrowPositions.length){
+    let cx=arrowPositions.reduce((a,p)=>a+p.x,0)/arrowPositions.length
+    let cy=arrowPositions.reduce((a,p)=>a+p.y,0)/arrowPositions.length
+    dispCtx.strokeStyle="blue"
+    dispCtx.beginPath()
+    dispCtx.arc(cx,cy,14,0,Math.PI*2)
+    dispCtx.stroke()
+  }
+}
+
+/* ---------- Analytics ---------- */
+function updateAnalytics(){
+  if(!scoreData.length){
+    $("analytics").innerHTML="No data yet"
+    return
+  }
+
+  let totals=scoreData.map(e=>e.reduce((a,b)=>a+b,0))
+  let overallAvg=(totals.reduce((a,b)=>a+b,0)/totals.length).toFixed(2)
+
+  let counts={"X":0,"10":0,"9":0}
+  displayData.flat().forEach(v=>{ if(counts[v]!=null) counts[v]++ })
+
+  $("analytics").innerHTML=`
+<strong>Overall Avg / End:</strong> ${overallAvg}<br>
+<strong>Avg / Arrow:</strong> ${(overallAvg/arrowsPerEnd).toFixed(2)}<br><br>
+<strong>Counts</strong><br>
+X: ${counts.X} | 10: ${counts["10"]} | 9: ${counts["9"]}
+`
+}
+
+/* ---------- Export ---------- */
+$("exportBtn").onclick=()=>{
+  let choice=prompt("Type CSV or PDF").toLowerCase()
+  if(choice==="csv") exportCSV()
+  if(choice==="pdf") exportPDF()
+}
+
+function exportCSV(){
+  let rows=[]
+  rows.push(["Session",$("sessionName").value])
+  rows.push(["Bow",$("bowStyle").value])
+  rows.push(["Distance",$("distance").value+" m"])
+  rows.push(["Target Face",getActiveTarget()===TARGETS.face122?"122cm":"80cm"])
+  rows.push([])
+  rows.push(["End","Scores","Total","Average","Accuracy %"])
+
+  scoreData.forEach((end,i)=>{
+    let total=end.reduce((a,b)=>a+b,0)
+    let avg=(total/end.length).toFixed(2)
+    let acc=((total/(end.length*10))*100).toFixed(2)
+    rows.push([i+1,displayData[i].join(" "),total,avg,acc])
+  })
+
+  let csv=rows.map(r=>r.join(",")).join("\n")
+  let blob=new Blob([csv],{type:"text/csv"})
+  let url=URL.createObjectURL(blob)
+
+  let a=document.createElement("a")
+  a.href=url
+  a.download="WA_Session_Report.csv"
+  a.click()
+}
+
+function exportPDF(){
+  let win=window.open()
+  let trendImg=$("lineChart").toDataURL()
+  let dispImg=$("dispersionChart").toDataURL()
+
+  win.document.write(`
+  <h2>Archery Session Report</h2>
+  <p><strong>Session:</strong> ${$("sessionName").value}</p>
+  <p><strong>Bow:</strong> ${$("bowStyle").value}</p>
+  <p><strong>Distance:</strong> ${$("distance").value} m</p>
+
+  <h3>Score History</h3>
+  ${$("scoreHistory").innerHTML}
+
+  <h3>Analytics</h3>
+  ${$("analytics").innerHTML}
+
+  <h3>Score Graph</h3>
+  <img src="${trendImg}" width="520">
+
+  <h3>Arrow Dispersion</h3>
+  <img src="${dispImg}" width="520">
+  `)
+
+  win.print()
+}
+
+/* ---------- Save / Load ---------- */
+$("saveSession").onclick=()=>{
+  let name=$("sessionName").value.trim()
+  if(!name) return toast("Enter session name")
+
+  let sessions=JSON.parse(localStorage.getItem(SESSION_KEY)||"{}")
+  sessions[name]={scoreData,displayData,bow:$("bowStyle").value,arrowsPerEnd:$("arrowsPerEnd").value}
+  localStorage.setItem(SESSION_KEY,JSON.stringify(sessions))
+  toast("Session Saved")
+}
+
+$("loadSession").onclick=()=>{
+  let name=$("sessionName").value.trim()
+  if(!name) return toast("Enter session name")
+
+  let sessions=JSON.parse(localStorage.getItem(SESSION_KEY)||"{}")
+  if(!sessions[name]) return toast("Session not found")
+
+  let s=sessions[name]
+  scoreData=s.scoreData||[]
+  displayData=s.displayData||[]
+  $("bowStyle").value=s.bow||"recurve"
+  $("arrowsPerEnd").value=s.arrowsPerEnd||6
+
+  updateDistances()
+  drawTarget()
+  createInputs()
+  updateHistory()
+  updateCharts()
+  updateAnalytics()
+}
+
+/* ---------- Undo ---------- */
+$("undoBtn").onclick=undoArrow
+
+function undoArrow(){
+  if(markers.length){
+
+    markers.pop().remove()
+    arrowPositions.pop()
+
+    let index = markers.length + 1
+    let input = document.getElementById("score"+index)
+    if(input) input.value=""
+
+    setActiveArrow(index)
+  }
+}
+
+
+/* ---------- Redo ---------- */
+function redoArrow(){
+
+  if(redoStack.length===0) return
+
+  let arrow = redoStack.pop()
+
+  placeMarker(arrow.x,arrow.y,arrow.score)
+  arrowPositions.push({x:arrow.x,y:arrow.y})
+
+  let input=document.getElementById("score"+currentArrow)
+  if(input) input.value=arrow.score
+
+  if(currentArrow<arrowsPerEnd) setActiveArrow(currentArrow+1)
+}
+
+/* ---------- Clear ---------- */
+$("clearAll").onclick=()=>{
+  if(confirm("Clear all scores?")){
+    scoreData=[]
+    displayData=[]
+    arrowPositions=[]
+    clearMarkers()
+    updateHistory()
+    updateCharts()
+    updateAnalytics()
+  }
+}
+
+/* ---------- Keyboard Shortcuts ---------- */
+let redoStack=[]
+
+document.addEventListener("keydown",function(e){
+
+  // CTRL + Z → Undo
+  if(e.ctrlKey && e.key.toLowerCase()==="z"){
+    e.preventDefault()
+    undoArrow()
+  }
+
+  // CTRL + Y → Redo
+  if(e.ctrlKey && e.key.toLowerCase()==="y"){
+    e.preventDefault()
+    redoArrow()
+  }
+
+})
+
+/* ---------- Init ---------- */
+$("bowStyle").onchange=()=>{updateDistances();drawTarget();clearMarkers()}
+$("woodFace").onchange=drawTarget
+$("distance").onchange=drawTarget
+$("arrowsPerEnd").onchange=createInputs
+$("submitEnd").onclick=submitEnd
+
+updateDistances()
+drawTarget()
+createInputs()
+
+</script>
+</body>
+</html>------ Redo ---------- */
+function redoArrow()
+{
+
+  if(redoStack.length===0) return
+
+  let arrow = redoStack.pop()
+
+  placeMarker(arrow.x,arrow.y,arrow.score)
+  arrowPositions.push({x:arrow.x,y:arrow.y})
+
+  let input=document.getElementById("score"+currentArrow)
+  if(input) input.value=arrow.score
+
+  if(currentArrow<arrowsPerEnd) setActiveArrow(currentArrow+1)
+}
+
+/* ---------- Clear ---------- */
+$("clearAll").onclick=()=>{
+  if(confirm("Clear all scores?")){
+    scoreData=[]
+    displayData=[]
+    arrowPositions=[]
+    clearMarkers()
+    updateHistory()
+    updateCharts()
+    updateAnalytics()
+  }
+}
+
+/* ---------- Keyboard Shortcuts ---------- */
+let redoStack=[]
+
+document.addEventListener("keydown",function(e){
+
+  // CTRL + Z → Undo
+  if(e.ctrlKey && e.key.toLowerCase()==="z"){
+    e.preventDefault()
+    undoArrow()
+  }
+
+  // CTRL + Y → Redo
+  if(e.ctrlKey && e.key.toLowerCase()==="y"){
+    e.preventDefault()
+    redoArrow()
+  }
+
+})
+
+/* ---------- Init ---------- */
+$("bowStyle").onchange=()=>{updateDistances();drawTarget();clearMarkers()}
+$("woodFace").onchange=drawTarget
+$("distance").onchange=drawTarget
+$("arrowsPerEnd").onchange=createInputs
+$("submitEnd").onclick=submitEnd
+
+updateDistances()
+drawTarget()
+createInputs()
+
+</script>
+</body>
+</html>
