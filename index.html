@@ -333,8 +333,12 @@ $("toggleTheme").onclick=()=>{
   document.body.classList.toggle("dark")
   localStorage.setItem("archery_theme",
   document.body.classList.contains("dark")?"dark":"")
-}
+lineChart.data.datasets[0].borderColor =
+    document.body.classList.contains("dark") ? "#39FF14" : "#7DF9FF"
 
+  lineChart.update()
+}
+  
 /* ---------- Toast ---------- */
 function toast(msg){
   let t=$("toast")
@@ -585,7 +589,15 @@ function updateHistory(){
 /* ---------- Charts ---------- */
 let lineChart=new Chart($("lineChart"),{
   type:"line",
-  data:{labels:[],datasets:[{label:"End Total",data:[],borderWidth:2}]}
+  data:{
+    labels:[],
+    datasets:[{
+      label:"End Total",
+      data:[],
+      borderWidth:2,
+      borderColor: document.body.classList.contains("dark") ? "#39FF14" : "#7DF9FF"
+    }]
+  }
 })
 
 function updateCharts(){
