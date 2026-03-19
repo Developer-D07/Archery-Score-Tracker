@@ -20,6 +20,9 @@
   --text:#e6eef8;
   --muted:#9fb6d8;
   --accent:#64b5f6;
+.dark body::before{
+  opacity:0.35;
+}
 }
 
 body{
@@ -28,6 +31,27 @@ body{
   padding:20px;
   color:var(--text);
   transition:.25s;
+  position:relative;
+  overflow-x:hidden;
+}
+
+/* Background Image (fixed + blur) */
+body::before{
+  content:"";
+  position:fixed;
+  top:0;
+  left:0;
+  width:100%;
+  height:100%;
+
+  background-image:url("./background.png");
+  background-size:cover;
+  background-position:center;
+
+  filter:blur(6px);
+  opacity:0.6;
+
+  z-index:-1;
 }
 
 .container{
@@ -192,7 +216,7 @@ canvas{display:block}
 <button id="loadSession">Load</button>
 <button id="deleteSession">Delete</button>
 
-<button id="toggleTheme">Dark Mode</button>
+<button id="toggleTheme">Light Mode</button>
 <button id="exportBtn">Export</button>
 <button id="clearAll">Clear</button>
 </div>
@@ -233,9 +257,10 @@ canvas{display:block}
 const $ = id => document.getElementById(id)
 
 /* ---------- Theme ---------- */
-if(localStorage.getItem("archery_theme")==="dark")
-document.body.classList.add("dark")
-
+// Default = Dark Mode
+if(localStorage.getItem("archery_theme")!=="light"){
+  document.body.classList.add("dark")
+}
 $("toggleTheme").onclick=()=>{
   document.body.classList.toggle("dark")
   localStorage.setItem("archery_theme",
@@ -674,69 +699,7 @@ function redoArrow(){
   let input=document.getElementById("score"+currentArrow)
   if(input) input.value=arrow.score
 
-  if(currentArrow<arrowsPerEnd) setActiveArrow(currentArrow+1)
-}
-
-/* ---------- Clear ---------- */
-$("clearAll").onclick=()=>{
-  if(confirm("Clear all scores?")){
-    scoreData=[]
-    displayData=[]
-    arrowPositions=[]
-    clearMarkers()
-    updateHistory()
-    updateCharts()
-    updateAnalytics()
-  }
-}
-
-/* ---------- Keyboard Shortcuts ---------- */
-let redoStack=[]
-
-document.addEventListener("keydown",function(e){
-
-  // CTRL + Z → Undo
-  if(e.ctrlKey && e.key.toLowerCase()==="z"){
-    e.preventDefault()
-    undoArrow()
-  }
-
-  // CTRL + Y → Redo
-  if(e.ctrlKey && e.key.toLowerCase()==="y"){
-    e.preventDefault()
-    redoArrow()
-  }
-
-})
-
-/* ---------- Init ---------- */
-$("bowStyle").onchange=()=>{updateDistances();drawTarget();clearMarkers()}
-$("woodFace").onchange=drawTarget
-$("distance").onchange=drawTarget
-$("arrowsPerEnd").onchange=createInputs
-$("submitEnd").onclick=submitEnd
-
-updateDistances()
-drawTarget()
-createInputs()
-
-</script>
-</body>
-</html>------ Redo ---------- */
-function redoArrow()
-{
-
-  if(redoStack.length===0) return
-
-  let arrow = redoStack.pop()
-
-  placeMarker(arrow.x,arrow.y,arrow.score)
-  arrowPositions.push({x:arrow.x,y:arrow.y})
-
-  let input=document.getElementById("score"+currentArrow)
-  if(input) input.value=arrow.score
-
-  if(currentArrow<arrowsPerEnd) setActiveArrow(currentArrow+1)
+  if(currentArrow < arrowsPerEnd) setActiveArrow(currentArrow+1)
 }
 
 /* ---------- Clear ---------- */
