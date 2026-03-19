@@ -14,15 +14,17 @@
   --muted:#555;
   --accent:#1565c0;
 }
+
 .dark{
   --bg:#0f1720;
   --card:#0b1220;
   --text:#e6eef8;
   --muted:#9fb6d8;
   --accent:#64b5f6;
+}
+
 .dark body::before{
   opacity:0.35;
-}
 }
 
 body{
@@ -44,7 +46,7 @@ body::before{
   width:100%;
   height:100%;
 
-  background-image:url("./index2.png");
+  background-image:url("./background.png");
   background-size:cover;
   background-position:center;
 
@@ -144,7 +146,8 @@ canvas{display:block}
 /* Zoom Lens */
 #zoomLens{
   position:absolute;
-  right:-210px;
+  right:0;
+  transform:translateX(110%);
   top:0;
   width:180px;
   height:180px;
@@ -209,7 +212,10 @@ canvas{display:block}
 </select>
 
 <label>Ends per session:</label>
-<input id="endsPerSession" type="number" value="10" style="width:90px">
+<select id="endsPerSession">
+  <option value="6">6 Ends</option>
+  <option value="12">12 Ends</option>
+</select>
 <input id="sessionName" placeholder="Session name">
 
 <button id="saveSession">Save</button>
@@ -227,6 +233,10 @@ canvas{display:block}
 <button id="submitEnd">Submit End</button>
 <button id="undoBtn">Undo</button>
 <button id="redoBtn">Redo</button>
+<br><br>
+<button id="historyBtn">Score History</button>
+<button id="resultsBtn">Results</button>
+<button id="backBtn" style="display:none">Back</button>
 </div>
 
 <div class="target-wrapper" id="targetWrapper">
@@ -234,18 +244,47 @@ canvas{display:block}
 <canvas id="zoomLens" width="180" height="180"></canvas>
 </div>
 
-<h3>Score History</h3>
-<div id="scoreHistory"></div>
+<!-- Live Score Preview -->
+<div id="livePreview" style="
+margin:20px auto;
+max-width:420px;
+padding:14px;
+border-radius:16px;
+background:linear-gradient(135deg,#1565c0,#64b5f6);
+color:white;
+box-shadow:0 6px 20px rgba(0,0,0,0.2);
+text-align:center;
+font-weight:700;
+">
+  <div id="currentTotal">Total: 0</div>
+  <div id="recentEnd">Last End: -</div>
+  <div id="prevEnd">Previous End: -</div>
+</div>
 
-<h3>Score Graph</h3>
-<canvas id="lineChart" height="160"></canvas>
+<!-- PAGE 1: Score History -->
+<div id="historyPage" style="display:none">
+  <h3>Score History</h3>
+  <div id="scoreHistory"></div>
 
-<h3>Arrow Dispersion</h3>
-<canvas id="dispersionChart" width="560" height="560"></canvas>
+  <h3>Score Graph</h3>
+  <canvas id="lineChart" height="160"></canvas>
+</div>
 
-<h3>Results & Analytics</h3>
-<div id="analytics"></div>
+<!-- PAGE 2: Results -->
+<div id="resultsPage" style="display:none">
 
+  <h3>Arrow Dispersion</h3>
+  <canvas id="dispersionChart" width="560" height="560"></canvas>
+
+  <h3>Results & Analytics</h3>
+  <div id="analytics"></div>
+
+</div>
+
+
+
+<div style="text-align:center; margin-top:20px;">
+  <button id="printPDF">Print PDF</button>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -460,10 +499,18 @@ function parseScore(v){ return v==="X" ? 10 : parseInt(v)||0 }
 
 function submitEnd(){
 
-  if(markers.length < arrowsPerEnd){
-    toast("Some arrows are missing on the target")
+  let maxEnds = parseInt($("endsPerSession").value)
+
+  if(scoreData.length >= maxEnds){
+    toast("End limit reached for this session")
     return
   }
+
+ if(markers.length < arrowsPerEnd){
+  toast("Input fields missing")
+  return
+}
+
 
   for(let i=1;i<=arrowsPerEnd;i++){
     if(!$(`score${i}`).value){
@@ -487,6 +534,7 @@ function submitEnd(){
   updateHistory()
   updateCharts()
   updateAnalytics()
+updateLivePreview()
 }
 
 /* ---------- Score History ---------- */
@@ -685,7 +733,6 @@ function undoArrow(){
   }
 }
 
-
 /* ---------- Redo ---------- */
 function redoArrow(){
 
@@ -712,6 +759,7 @@ $("clearAll").onclick=()=>{
     updateHistory()
     updateCharts()
     updateAnalytics()
+    updateLivePreview()
   }
 }
 
@@ -732,7 +780,78 @@ document.addEventListener("keydown",function(e){
     redoArrow()
   }
 
+// ENTER → Submit End
+  if(e.key === "Enter"){
+    e.preventDefault()
+    submitEnd()
+  }
+
+
 })
+
+/* ---------- Page Navigation ---------- */
+
+$("historyBtn").onclick = () => {
+  $("historyPage").style.display = "block"
+  $("resultsPage").style.display = "none"
+
+  $("targetWrapper").style.display = "none"
+
+  $("historyBtn").style.display = "none"
+  $("resultsBtn").style.display = "none"
+  $("backBtn").style.display = "inline-block"
+}
+
+$("resultsBtn").onclick = () => {
+  $("resultsPage").style.display = "block"
+  $("historyPage").style.display = "none"
+
+  $("targetWrapper").style.display = "none"
+
+  $("historyBtn").style.display = "none"
+  $("resultsBtn").style.display = "none"
+  $("backBtn").style.display = "inline-block"
+}
+
+$("backBtn").onclick = () => {
+  $("historyPage").style.display = "none"
+  $("resultsPage").style.display = "none"
+
+  $("targetWrapper").style.display = "block"
+
+  $("historyBtn").style.display = "inline-block"
+  $("resultsBtn").style.display = "inline-block"
+  $("backBtn").style.display = "none"
+}
+
+/* ---------- Live Preview ---------- */
+function updateLivePreview(){
+
+  if(scoreData.length === 0){
+    $("currentTotal").textContent = "Total: 0"
+    $("recentEnd").textContent = "Last End: -"
+    $("prevEnd").textContent = "Previous End: -"
+    return
+  }
+
+  // Total score
+  let total = scoreData.flat().reduce((a,b)=>a+b,0)
+  $("currentTotal").textContent = "Total: " + total
+
+  // Last end
+  let lastEnd = scoreData[scoreData.length - 1]
+  let lastTotal = lastEnd.reduce((a,b)=>a+b,0)
+  $("recentEnd").textContent = "Last End: " + lastTotal
+
+  // Previous end (only 1)
+  if(scoreData.length > 1){
+    let prev = scoreData[scoreData.length - 2]
+    let prevTotal = prev.reduce((a,b)=>a+b,0)
+    $("prevEnd").textContent = "Previous End: " + prevTotal
+  } else {
+    $("prevEnd").textContent = "Previous End: -"
+  }
+}
 
 /* ---------- Init ---------- */
 $("bowStyle").onchange=()=>{updateDistances();drawTarget();clearMarkers()}
@@ -744,6 +863,32 @@ $("submitEnd").onclick=submitEnd
 updateDistances()
 drawTarget()
 createInputs()
+
+document.getElementById("printPDF").onclick = function(){
+
+  let win = window.open()
+
+  let trendImg = document.getElementById("lineChart").toDataURL()
+  let dispImg = document.getElementById("dispersionChart").toDataURL()
+
+  win.document.write(`
+    <h2>Archery Score Report</h2>
+
+    <h3>Score History</h3>
+    ${document.getElementById("scoreHistory").innerHTML}
+
+    <h3>Score Graph</h3>
+    <img src="${trendImg}" width="500">
+
+    <h3>Arrow Dispersion</h3>
+    <img src="${dispImg}" width="500">
+
+    <h3>Results & Analytics</h3>
+    ${document.getElementById("analytics").innerHTML}
+  `)
+
+  win.print()
+}
 
 </script>
 </body>
