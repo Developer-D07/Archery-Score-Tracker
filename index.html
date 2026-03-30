@@ -885,7 +885,7 @@ function updateLivePreview(){
   // Last end
   let lastEnd = scoreData[scoreData.length - 1]
   let lastTotal = lastEnd.reduce((a,b)=>a+b,0)
-    $("recentEnd").textContent = "Current End: " + lastTotal
+   $("recentEnd").textContent = "Current End: " + lastTotal
 
   // Previous end (only 1)
   if(scoreData.length > 1){
