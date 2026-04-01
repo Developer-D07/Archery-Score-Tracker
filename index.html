@@ -37,7 +37,6 @@ body{
   overflow-x:hidden;
 }
 
-/* Background Image (fixed + blur) */
 body::before{
   content:"";
   position:fixed;
@@ -52,8 +51,6 @@ body::before{
   background-position:center;
 
   transform:translate(-50%, -50%);
-
-  filter:blur(6px);
   opacity:0.6;
 
   z-index:-1;
